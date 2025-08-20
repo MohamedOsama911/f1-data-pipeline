@@ -25,7 +25,7 @@ SELECT
     ps."STOP"::INT AS stop_number,
     ps."LAP"::INT AS lap,
     ps."TIME" AS time_of_day,
-    ps."DURATION"::FLOAT AS duration_seconds,
+    TRY_CAST(NULLIF(ps."DURATION", '') AS FLOAT) AS duration_seconds,  -- Fixed this line
 
     -- Columns joined from our Race Context CTE (ctx)
     ctx.race_name,
