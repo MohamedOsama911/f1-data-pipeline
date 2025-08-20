@@ -2,8 +2,8 @@ version: 2
 
 sources:
   - name: ergast_raw # This is the source name
-    schema: RAW_DATA # From your .env file
-    database: F1_PROJECT
+    schema: RAW # From your .env file
+    database: F1_ANALYTICS
     tables:
       - name: RAW_RESULTS
       - name: RAW_QUALIFYING
