@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: ergast_raw # This is the source name
+    schema: RAW_DATA # From your .env file
+    database: F1_PROJECT
+    tables:
+      - name: RAW_RESULTS
+      - name: RAW_QUALIFYING
+      - name: RAW_PIT_STOPS
+      - name: RAW_DRIVER_STANDINGS
+      - name: RAW_CONSTRUCTOR_STANDINGS

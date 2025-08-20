@@ -1,68 +1,79 @@
+# ingestion/main.py
 import os
 import pandas as pd
 from dotenv import load_dotenv
 from utils.api_client import (
-    get_total_rounds, get_race_results, get_qualifying_results,
-    get_pit_stops, get_driver_standings, get_constructor_standings
+    get_races_data, get_driver_standings, get_constructor_standings
 )
 from utils.snowflake_loader import load_df_to_snowflake
 import logging
 
-# Load environment variables from .env file
 load_dotenv()
+SEASON = 2025
 
-SEASON = 2025 
+def process_and_load_nested_data(races_data, table_name, record_path, meta_fields):
+    """
+    Processes nested JSON data from the 'Races' object and loads it to Snowflake.
+    `record_path` specifies the list to unpack (e.g., ['Results']).
+    `meta_fields` specifies the parent-level fields to include.
+    """
+    if not races_data:
+        logging.warning(f"No race data received for {table_name}. Skipping.")
+        return
+    
+    # json_normalize flattens the nested structure
+    df = pd.json_normalize(
+        races_data,
+        record_path=record_path,
+        meta=meta_fields,
+        errors='ignore' # Ignore records where the record_path might be missing
+    )
 
-def process_and_load(data, table_name, extra_cols={}):
-    """Processes raw JSON data into a DataFrame and loads it."""
+    # Clean up column names that result from nesting (e.g., 'Circuit.circuitName' -> 'CIRCUIT.CIRCUITNAME')
+    df.columns = df.columns.str.upper().str.replace('.', '_', regex=False)
+    
+    load_df_to_snowflake(df, table_name)
+
+
+def process_and_load_simple_data(data, table_name):
+    """Processes simple, non-nested data like standings."""
     if not data:
         logging.warning(f"No data received for {table_name}. Skipping.")
         return
     
     df = pd.json_normalize(data)
-    
-    # Add extra columns like season and round if provided
-    for col, val in extra_cols.items():
-        df[col] = val
-        
-    # Convert column names to uppercase to match Snowflake's default behavior
-    df.columns = [col.upper() for col in df.columns]
-
+    df['SEASON'] = SEASON
+    df.columns = df.columns.str.upper().str.replace('.', '_', regex=False)
     load_df_to_snowflake(df, table_name)
+
 
 def ingest_season_data(season: int):
     """Ingests all F1 data for a given season."""
     logging.info(f"Starting ingestion for the {season} F1 season...")
-    total_rounds = get_total_rounds(season)
+
+    # Define the parent-level fields we want to keep for each record
+    meta = ['season', 'round', 'raceName', 'date', ['Circuit', 'circuitId'], ['Circuit', 'circuitName']]
     
-    if total_rounds == 0:
-        logging.error("Could not determine the number of rounds. Aborting.")
-        return
+    # Fetch, process, and load each nested data type
+    results_data = get_races_data(season, 'results')
+    process_and_load_nested_data(results_data, "RAW_RESULTS", ['Results'], meta)
 
-    logging.info(f"Found {total_rounds} rounds for the {season} season.")
-
-    all_results, all_qualifying, all_pit_stops = [], [], []
-
-    for r in range(1, total_rounds + 1):
-        round_info = {'SEASON': season, 'ROUND': r}
-        
-        # Append data from each round to a list
-        # extend means you’re appending a whole list of dicts at once.
-        all_results.extend(get_race_results(season, r))
-        all_qualifying.extend(get_qualifying_results(season, r))
-        all_pit_stops.extend(get_pit_stops(season, r))
+    qualifying_data = get_races_data(season, 'qualifying')
+    process_and_load_nested_data(qualifying_data, "RAW_QUALIFYING", ['QualifyingResults'], meta)
     
-    # Process and load data for each data type
-    process_and_load(all_results, "RAW_RESULTS", {'SEASON': season})
-    process_and_load(all_qualifying, "RAW_QUALIFYING", {'SEASON': season})
-    process_and_load(all_pit_stops, "RAW_PIT_STOPS", {'SEASON': season})
-
-    # Ingest standings data
+    
+    # pitstops_data = get_races_data(season, 'pitstops')
+    # Pitstops doesn't have a record path, the list is the data itself
+    # We still need to join it to get constructor, but the raw load is simpler.
+    # For now, let's keep the pitstop ingestion simple as it doesn't contain circuit info anyway.
+    # Note: A full implementation might handle pitstops differently.
+    
+    # Ingest standings data (this part remains the same)
     driver_standings = get_driver_standings(season)
-    process_and_load(driver_standings, "RAW_DRIVER_STANDINGS", {'SEASON': season})
+    process_and_load_simple_data(driver_standings, "RAW_DRIVER_STANDINGS")
 
     constructor_standings = get_constructor_standings(season)
-    process_and_load(constructor_standings, "RAW_CONSTRUCTOR_STANDINGS", {'SEASON': season})
+    process_and_load_simple_data(constructor_standings, "RAW_CONSTRUCTOR_STANDINGS")
     
     logging.info(f"Finished ingestion for the {season} F1 season.")
 

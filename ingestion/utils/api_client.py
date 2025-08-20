@@ -23,24 +23,6 @@ def get_total_rounds(season: int) -> int:
         return len(data['MRData']['RaceTable']['Races'])
     return 0
 
-def get_race_results(season: int, round: int):
-    """Fetches race results for a specific season and round."""
-    logging.info(f"Fetching race results for {season} round {round}...")
-    data = get_data(f"{season}/{round}/results")
-    return data['MRData']['RaceTable']['Races'][0]['Results'] if data and data['MRData']['RaceTable']['Races'] else []
-
-def get_qualifying_results(season: int, round: int):
-    """Fetches qualifying results for a specific season and round."""
-    logging.info(f"Fetching qualifying results for {season} round {round}...")
-    data = get_data(f"{season}/{round}/qualifying")
-    return data['MRData']['RaceTable']['Races'][0]['QualifyingResults'] if data and data['MRData']['RaceTable']['Races'] else []
-
-def get_pit_stops(season: int, round: int):
-    """Fetches pit stop data for a specific season and round."""
-    logging.info(f"Fetching pit stops for {season} round {round}...")
-    data = get_data(f"{season}/{round}/pitstops")
-    return data['MRData']['RaceTable']['Races'][0]['PitStops'] if data and data['MRData']['RaceTable']['Races'] else []
-
 def get_driver_standings(season: int):
     """Fetches driver standings for a given season."""
     logging.info(f"Fetching driver standings for {season}...")
@@ -53,3 +35,21 @@ def get_constructor_standings(season: int):
     data = get_data(f"{season}/constructorStandings")
     return data['MRData']['StandingsTable']['StandingsLists'][0]['ConstructorStandings'] if data and data['MRData']['StandingsTable']['StandingsLists'] else []
 
+def get_races_data(season: int, data_key: str):
+    """
+    A generic function to get the full race object list for a given data type
+    (results, qualifying, pitstops).
+    """
+    all_races = []
+    total_rounds = get_total_rounds(season)
+    if total_rounds == 0:
+        return []
+
+    for r in range(1, total_rounds + 1):
+        logging.info(f"Fetching {data_key} for {season} round {r}...")
+        endpoint = f"{season}/{r}/{data_key}"
+        data = get_data(endpoint)
+        if data and data['MRData']['RaceTable']['Races']:
+            all_races.extend(data['MRData']['RaceTable']['Races'])
+            
+    return all_races
